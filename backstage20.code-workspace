@@ -1,0 +1,29 @@
+{
+	"folders": [
+		{
+			"path": "../phone"
+		},
+		{
+			"path": "../oss-test"
+		},
+		{
+			"path": "../on-sitestudios.com"
+		},
+		{
+			"path": "../logs"
+		},
+		{
+			"path": "../../../rcal"
+		},
+		{
+			"path": "../ai"
+		},
+		{
+			"path": "."
+		},
+		{
+			"path": "../claude"
+		}
+	],
+	"settings": {}
+}
