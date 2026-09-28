@@ -14,37 +14,21 @@ $pageTitle   = "Send Email — " . myhtmlspecialchars($siteName);
 
 // ── SendGrid configuration ───────────────────────────────────
 // Load from environment or define here (never hard-code in production)
-$sendgridApiKey  = $_ENV['SENDGRID_API_KEY'] ? $_ENV['SENDGRID_API_KEY'] : (getenv('SENDGRID_API_KEY') ? getenv('SENDGRID_API_KEY') : '');
-$defaultFromEmail = "software@plexsoftapps.com";  // $_ENV['MAIL_FROM_EMAIL'] ? $_ENV['MAIL_FROM_EMAIL'] : (getenv('MAIL_FROM_EMAIL') ? getenv('MAIL_FROM_EMAIL') : 'noreply@onsitestudios.com');
-$defaultFromName  = "Software"; //$_ENV['MAIL_FROM_NAME']  ? $_ENV['MAIL_FROM_NAME'] : (getenv('MAIL_FROM_NAME') ? getenv('MAIL_FROM_NAME')  : 'On-Site Studios');
-$defaultToEmail = "steve.smith@plexsoftapps.com";
+$sendgridApiKey  = "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";  // getenv('SENDGRID_API_KEY');
+$defaultFromEmail = "production@on-sitestudios.com";  // $_ENV['MAIL_FROM_EMAIL'] ? $_ENV['MAIL_FROM_EMAIL'] : (getenv('MAIL_FROM_EMAIL') ? getenv('MAIL_FROM_EMAIL') : 'noreply@onsitestudios.com');
+$defaultFromName  = "Production"; //$_ENV['MAIL_FROM_NAME']  ? $_ENV['MAIL_FROM_NAME'] : (getenv('MAIL_FROM_NAME') ? getenv('MAIL_FROM_NAME')  : 'On-Site Studios');
+$defaultToName = "Steve Smith";
+$defaultToEmail = "development@on-sitestudios.com";
 $defaultSubject = "Test of Sendgrid";
 $defaultBody = "<h2>This is a test</h2>";
 
+error_log('Env:');
+error_log(print_r(getenv(),true));
+error_log('API:' . $sendgridApiKey);
+
+
 // ── Nav items ────────────────────────────────────────────────
 require_once('includes/navitems.php');
-// $navItems = [
-//     ['label' => 'Home',       'href' => 'index.php', 'children' => []],
-//     ['label' => 'Projects',   'href' => '#projects',  'children' => []],
-//     ['label' => 'Scheduling', 'href' => '#scheduling','children' => []],
-//     ['label' => 'Reports',    'href' => '#reports',   'children' => []],
-//     ['label' => 'Admin',      'href' => '#admin',     'children' => []],
-//     ['label' => 'Ziflow',     'href' => '#ziflow',    'children' => []],
-//     [
-//         'label'    => 'Contact',
-//         'href'     => '#contact',
-//         'children' => [['label' => 'Support', 'href' => '#support']],
-//     ],
-//     [
-//         'label'    => 'About',
-//         'href'     => '#about',
-//         'children' => [
-//             ['label' => 'Mission',  'href' => '#mission'],
-//             ['label' => 'Vision',   'href' => '#vision'],
-//             ['label' => 'Founders', 'href' => '#founders'],
-//         ],
-//     ],
-// ];
 
 // ============================================================
 //  SENDGRID MAILER — pure cURL, no SDK dependency
@@ -52,9 +36,8 @@ require_once('includes/navitems.php');
 class SendGridMailer
 {
     const API_URL = 'https://api.sendgrid.com/v3/mail/send';
-    const API_KEY = $this->sendgridApiKey;
 
-    private $apiKey = API_KEY;
+    private $apiKey = "";
     private $defaultFromEmail = "";
     private $defaultFromName = "";
 
@@ -63,6 +46,8 @@ class SendGridMailer
         $defaultFromEmail,
         $defaultFromName
     ) {
+        error_log('In SendGridMailer');
+    
         $this->apiKey = $apiKey;
         $this->defaultFromEmail = $defaultFromEmail;
         $this->defaultFromName = $defaultFromName;
@@ -162,32 +147,46 @@ class SendGridMailer
             CURLOPT_TIMEOUT        => 15,
         ]);
 
-        $responseBody = curl_exec($ch);
-        $statusCode   = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError    = curl_error($ch);
-        $messageId    = curl_getinfo($ch, CURLINFO_REDIRECT_URL); // SG returns X-Message-Id header
-        curl_close($ch);
+        error_log(print_r($ch,true));
 
-        if ($curlError) {
-            return ['success' => false, 'statusCode' => 0, 'message' => 'cURL error: ' . $curlError, 'messageId' => ''];
+        try {
+            $responseBody = curl_exec($ch);
+            $statusCode   = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            error_log('Status=' . $statusCode);
+
+            $curlError    = curl_error($ch);
+            $messageId    = curl_getinfo($ch, CURLINFO_REDIRECT_URL); // SG returns X-Message-Id header
+            curl_close($ch);
+
+            if ($curlError) {
+                return ['success' => false, 'statusCode' => 0, 'message' => 'cURL error: ' . $curlError, 'messageId' => ''];
+            }
+
+            // 2xx = success
+            if ($statusCode >= 200 && $statusCode < 300) {
+                return ['success' => true, 'statusCode' => $statusCode, 'message' => 'Email sent successfully.', 'messageId' => $messageId ?: ''];
+            }
+
+            // Parse SendGrid error body
+            $decoded = json_decode($responseBody ?: '{}', true);
+            $errors  = $decoded['errors'] ? [] : '';
+            $errMsg  = implode('; ', array_column($errors, 'message'));
+
+            return [
+                'success'    => false,
+                'statusCode' => $statusCode,
+                'message'    => $errMsg ?: ('SendGrid error ' . $statusCode),
+                'messageId'  => '',
+            ];
         }
-
-        // 2xx = success
-        if ($statusCode >= 200 && $statusCode < 300) {
-            return ['success' => true, 'statusCode' => $statusCode, 'message' => 'Email sent successfully.', 'messageId' => $messageId ?: ''];
+        catch(error) {
+            return [
+                'success'    => false,
+                'statusCode' => error.code,
+                'message'    => error.message ?: ('SendGrid error ' . error.code),
+                'messageId'  => '',
+            ];
         }
-
-        // Parse SendGrid error body
-        $decoded = json_decode($responseBody ?: '{}', true);
-        $errors  = $decoded['errors'] ? [] : '';
-        $errMsg  = implode('; ', array_column($errors, 'message'));
-
-        return [
-            'success'    => false,
-            'statusCode' => $statusCode,
-            'message'    => $errMsg ?: ('SendGrid error ' . $statusCode),
-            'messageId'  => '',
-        ];
     }
 }
 
@@ -362,485 +361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title><?= $pageTitle ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        :root {
-            --purple:        #9370DB;
-            --purple-dark:   #7B5EBF;
-            --purple-deeper: #6B4FA8;
-            --text-light:    #f0eaff;
-            --text-muted:    #d8cef5;
-            --banner-height: 150px;
-            --footer-height: 60px;
-        }
-
-        html, body { height: 100%; font-family: 'DM Sans', sans-serif; }
-
-        body {
-            background-color: #f7f4fd;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            color: #333;
-        }
-
-        /* ===== TOP BANNER — identical to index.php ===== */
-        header.top-banner {
-            position: fixed;
-            top: 0; left: 0; right: 0;
-            height: var(--banner-height);
-            background: linear-gradient(135deg, #7B5EBF 0%, #9370DB 50%, #A880E8 100%);
-            box-shadow: 0 4px 24px rgba(60, 30, 100, 0.35);
-            display: flex;
-            flex-direction: column;
-            z-index: 1000;
-            border-bottom: 1px solid rgba(255,255,255,0.12);
-        }
-
-        .banner-top-row {
-            display: flex;
-            align-items: center;
-            padding: 0 24px;
-            gap: 14px;
-            flex: 1;
-        }
-
-        .banner-nav-row {
-            display: flex;
-            align-items: stretch;
-            padding: 0 20px;
-            height: 44px;
-            border-top: 1px solid rgba(255,255,255,0.12);
-            background: rgba(0,0,0,0.08);
-            overflow: visible;
-        }
-
-        .logo {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            text-decoration: none;
-            flex-shrink: 0;
-        }
-        .logo-img { height: 52px; width: auto; display: block; transition: opacity 0.2s, transform 0.2s; }
-        .logo:hover .logo-img { opacity: 0.88; transform: scale(1.03); }
-        .logo-site-label {
-            font-family: 'Playfair Display', serif;
-            font-size: 24px; font-weight: 600; color: #ffffff;
-            letter-spacing: 0.4px; white-space: nowrap;
-            text-shadow: 0 1px 4px rgba(0,0,0,0.15);
-        }
-
-        .search-wrapper { flex: 1; display: flex; justify-content: center; }
-        .search-bar {
-            display: flex; align-items: center;
-            background: #ffffff;
-            border: 1px solid rgba(255,255,255,0.6);
-            border-radius: 50px;
-            padding: 0 18px; width: 100%; max-width: 420px; height: 44px;
-            transition: box-shadow 0.2s;
-        }
-        .search-bar:focus-within { box-shadow: 0 0 0 3px rgba(255,255,255,0.3); }
-        .search-bar svg { width: 17px; height: 17px; color: #9370DB; flex-shrink: 0; margin-right: 10px; }
-        .search-bar input {
-            flex: 1; background: transparent; border: none; outline: none;
-            color: #3a2a5a; font-family: 'DM Sans', sans-serif; font-size: 14px;
-        }
-        .search-bar input::placeholder { color: #b09ed4; }
-
-        .banner-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-        .btn-login {
-            display: inline-flex; align-items: center; gap: 7px;
-            background: rgba(255,255,255,0.15); border: 1.5px solid rgba(255,255,255,0.4);
-            border-radius: 50px; padding: 0 18px; height: 38px;
-            color: #fff; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 500;
-            letter-spacing: 0.3px; text-decoration: none; cursor: pointer;
-            transition: background 0.2s, transform 0.15s; white-space: nowrap; backdrop-filter: blur(6px);
-        }
-        .btn-login:hover { background: rgba(255,255,255,0.28); transform: translateY(-1px); }
-        .btn-login svg { width: 15px; height: 15px; }
-
-        .avatar-wrap { flex-shrink: 0; cursor: pointer; position: relative; }
-        .avatar {
-            width: 42px; height: 42px; border-radius: 50%;
-            background: linear-gradient(135deg, #e0c8ff, #c09aff);
-            border: 2px solid rgba(255,255,255,0.4);
-            display: flex; align-items: center; justify-content: center;
-            font-family: 'Playfair Display', serif; font-size: 17px; color: #5a3fa0; font-weight: 700;
-            transition: transform 0.2s; box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-        }
-        .avatar:hover { transform: scale(1.08); }
-        .avatar-status {
-            position: absolute; bottom: 1px; right: 1px;
-            width: 10px; height: 10px; background: #4ade80;
-            border-radius: 50%; border: 2px solid var(--purple);
-        }
-
-        nav.banner-nav { display: flex; align-items: stretch; gap: 2px; height: 100%; }
-        .nav-item { position: relative; display: flex; align-items: stretch; }
-        .nav-item > a {
-            display: inline-flex; align-items: center; gap: 5px; padding: 0 18px;
-            color: rgba(255,255,255,0.85); text-decoration: none;
-            font-size: 14px; font-weight: 400; letter-spacing: 0.3px;
-            border-radius: 6px 6px 0 0;
-            transition: background 0.18s, color 0.18s; white-space: nowrap;
-        }
-        .nav-item > a:hover, .nav-item:hover > a { background: rgba(255,255,255,0.14); color: #fff; }
-        .nav-item > a.active {
-            background: rgba(255,255,255,0.18); color: #fff; font-weight: 500;
-            border-bottom: 2px solid rgba(255,255,255,0.75); border-radius: 6px 6px 0 0;
-        }
-        .chevron { width: 12px; height: 12px; transition: transform 0.2s; opacity: 0.75; }
-        .nav-item:hover > a .chevron { transform: rotate(180deg); opacity: 1; }
-        .dropdown {
-            display: none; position: absolute; top: 100%; left: 0;
-            min-width: 160px; background: #5a3fa0;
-            border-radius: 0 8px 8px 8px;
-            box-shadow: 0 8px 28px rgba(40,15,80,0.45);
-            overflow: hidden; z-index: 2000;
-            animation: dropIn 0.16s ease;
-        }
-        @keyframes dropIn {
-            from { opacity: 0; transform: translateY(-6px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        .nav-item:hover .dropdown { display: block; }
-        .dropdown a {
-            display: flex; align-items: center; padding: 11px 18px;
-            color: rgba(255,255,255,0.88); text-decoration: none;
-            font-size: 13.5px; font-weight: 400;
-            border-bottom: 1px solid rgba(255,255,255,0.08);
-            transition: background 0.15s, color 0.15s; white-space: nowrap;
-        }
-        .dropdown a:last-child { border-bottom: none; }
-        .dropdown a:hover { background: rgba(255,255,255,0.15); color: #fff; padding-left: 24px; }
-
-        .hamburger {
-            display: none; background: none; border: 1.5px solid rgba(255,255,255,0.35);
-            border-radius: 8px; cursor: pointer; padding: 6px 8px; color: #fff;
-            flex-shrink: 0; transition: background 0.2s;
-        }
-        .hamburger:hover { background: rgba(255,255,255,0.15); }
-        .hamburger svg { width: 20px; height: 20px; display: block; }
-
-        .mobile-nav {
-            display: none; position: fixed; top: var(--banner-height); left: 0; right: 0;
-            background: #6B4FA8; z-index: 999; flex-direction: column;
-            border-bottom: 2px solid rgba(255,255,255,0.15);
-            box-shadow: 0 8px 20px rgba(60,20,100,0.3);
-            max-height: calc(100vh - var(--banner-height)); overflow-y: auto;
-        }
-        .mobile-nav.open { display: flex; }
-        .mobile-nav-item > a.mobile-parent {
-            display: flex; align-items: center; justify-content: space-between;
-            padding: 15px 28px; color: rgba(255,255,255,0.95); text-decoration: none;
-            font-size: 15px; font-weight: 500; border-bottom: 1px solid rgba(255,255,255,0.1);
-            transition: background 0.15s;
-        }
-        .mobile-nav-item > a.mobile-parent:hover { background: rgba(255,255,255,0.1); }
-        .m-chevron { width: 14px; height: 14px; transition: transform 0.2s; opacity: 0.7; }
-        .mobile-nav-item.open > a.mobile-parent .m-chevron { transform: rotate(180deg); }
-        .mobile-nav-item > a.mobile-simple {
-            display: block; padding: 15px 28px; color: rgba(255,255,255,0.95);
-            text-decoration: none; font-size: 15px; font-weight: 500;
-            border-bottom: 1px solid rgba(255,255,255,0.1); transition: background 0.15s;
-        }
-        .mobile-nav-item > a.mobile-simple:hover { background: rgba(255,255,255,0.1); }
-        .mobile-submenu { display: none; flex-direction: column; background: rgba(0,0,0,0.12); }
-        .mobile-nav-item.open .mobile-submenu { display: flex; }
-        .mobile-submenu a {
-            display: block; padding: 12px 28px 12px 44px; color: rgba(255,255,255,0.8);
-            text-decoration: none; font-size: 14px; font-weight: 300;
-            border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.15s;
-        }
-        .mobile-submenu a:hover { background: rgba(255,255,255,0.08); color: #fff; }
-
-        /* ===== MAIN CONTENT ===== */
-        main {
-            flex: 1;
-            margin-top: var(--banner-height);
-            margin-bottom: var(--footer-height);
-            padding: 40px 24px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-
-        .page-header {
-            width: 100%;
-            max-width: 780px;
-            margin-bottom: 28px;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-        .page-header-icon {
-            width: 48px; height: 48px;
-            background: linear-gradient(135deg, var(--purple-dark), var(--purple));
-            border-radius: 14px;
-            display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 4px 16px rgba(147,112,219,0.35);
-            flex-shrink: 0;
-        }
-        .page-header-icon svg { width: 24px; height: 24px; color: #fff; }
-        .page-header h1 {
-            font-family: 'Playfair Display', serif;
-            font-size: 28px;
-            color: var(--purple-deeper);
-        }
-        .page-header p { font-size: 13.5px; color: #8878a8; font-weight: 300; margin-top: 3px; }
-
-        /* ===== ALERT BANNERS ===== */
-        .alert {
-            width: 100%; max-width: 780px;
-            border-radius: 12px;
-            padding: 14px 18px;
-            margin-bottom: 20px;
-            display: flex;
-            align-items: flex-start;
-            gap: 12px;
-            font-size: 14px;
-            line-height: 1.5;
-            animation: slideIn 0.25s ease;
-        }
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateY(-8px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        .alert svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
-        .alert-success { background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; }
-        .alert-error   { background: #fff1f2; border: 1px solid #fca5a5; color: #9b1c1c; }
-        .alert-warning { background: #fffbeb; border: 1px solid #fcd34d; color: #78350f; }
-
-        /* ===== EMAIL FORM CARD ===== */
-        .email-card {
-            background: #fff;
-            border: 1px solid #e6d9ff;
-            border-radius: 20px;
-            padding: 36px 40px;
-            width: 100%;
-            max-width: 780px;
-            box-shadow: 0 6px 28px rgba(147,112,219,0.10);
-        }
-
-        /* Section dividers inside the form */
-        .form-section {
-            margin-bottom: 28px;
-        }
-        .form-section:last-child { margin-bottom: 0; }
-
-        .section-label {
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 1.8px;
-            text-transform: uppercase;
-            color: rgba(107,79,168,0.5);
-            margin-bottom: 14px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #f0e8ff;
-        }
-
-        /* Row / column layout */
-        .form-row { display: flex; gap: 16px; }
-        .form-row .form-group { flex: 1; }
-
-        .form-group {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            margin-bottom: 16px;
-        }
-        .form-group:last-child { margin-bottom: 0; }
-
-        label {
-            font-size: 13px;
-            font-weight: 500;
-            color: var(--purple-deeper);
-            letter-spacing: 0.2px;
-        }
-        label .req { color: #c97de0; margin-left: 2px; }
-        label .hint {
-            font-weight: 300;
-            color: #b09ed4;
-            font-size: 11.5px;
-            margin-left: 6px;
-        }
-
-        .input-wrap { position: relative; }
-        .input-wrap svg.field-icon {
-            position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
-            width: 16px; height: 16px; color: #b09ed4; pointer-events: none;
-            transition: color 0.2s;
-        }
-
-        input[type="text"],
-        input[type="email"],
-        input[type="file"],
-        textarea,
-        select {
-            width: 100%;
-            padding: 11px 13px 11px 38px;
-            border: 1.5px solid #ddd0f5;
-            border-radius: 10px;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 14px;
-            color: #3a2a5a;
-            background: #fff;
-            outline: none;
-            transition: border-color 0.2s, box-shadow 0.2s;
-        }
-        input.no-icon, textarea.no-icon { padding-left: 13px; }
-        input[type="file"] { padding: 9px 13px; cursor: pointer; }
-
-        input:focus, textarea:focus, select:focus {
-            border-color: var(--purple);
-            box-shadow: 0 0 0 3px rgba(147,112,219,0.15);
-        }
-        input::placeholder, textarea::placeholder { color: #c0b2d8; font-weight: 300; }
-
-        textarea { resize: vertical; min-height: 120px; line-height: 1.6; }
-        #body_html { min-height: 200px; font-family: monospace; font-size: 13px; }
-
-        .input-wrap:focus-within svg.field-icon { color: var(--purple); }
-
-        /* Field error state */
-        .field-error input,
-        .field-error textarea { border-color: #fca5a5; }
-        .field-error input:focus,
-        .field-error textarea:focus { box-shadow: 0 0 0 3px rgba(239,68,68,0.12); }
-        .error-text {
-            font-size: 12px;
-            color: #dc2626;
-            margin-top: 3px;
-        }
-
-        /* Tabs for HTML / Plain-text body */
-        .tab-bar {
-            display: flex;
-            gap: 2px;
-            margin-bottom: 10px;
-        }
-        .tab-btn {
-            padding: 7px 16px;
-            border: 1.5px solid #ddd0f5;
-            border-radius: 8px 8px 0 0;
-            border-bottom: none;
-            background: #f7f4fd;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 12.5px;
-            font-weight: 500;
-            color: #9b8abf;
-            cursor: pointer;
-            transition: background 0.15s, color 0.15s;
-        }
-        .tab-btn.active {
-            background: #fff;
-            color: var(--purple-deeper);
-            border-color: #ddd0f5;
-        }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-
-        /* Preview pane */
-        #html-preview {
-            width: 100%;
-            min-height: 200px;
-            border: 1.5px solid #ddd0f5;
-            border-radius: 0 10px 10px 10px;
-            padding: 16px;
-            font-family: sans-serif;
-            font-size: 14px;
-            background: #fdfbff;
-            color: #333;
-            line-height: 1.6;
-            overflow-y: auto;
-        }
-
-        /* Character counter */
-        .char-count {
-            font-size: 11px;
-            color: #b09ed4;
-            text-align: right;
-            margin-top: 4px;
-        }
-        .char-count.warn { color: #f59e0b; }
-        .char-count.over { color: #dc2626; }
-
-        /* Submit button */
-        .btn-send {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 9px;
-            width: 100%;
-            padding: 14px 24px;
-            background: linear-gradient(135deg, var(--purple-dark) 0%, var(--purple) 100%);
-            border: none;
-            border-radius: 12px;
-            color: #fff;
-            font-family: 'DM Sans', sans-serif;
-            font-size: 15px;
-            font-weight: 500;
-            letter-spacing: 0.3px;
-            cursor: pointer;
-            transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
-            box-shadow: 0 4px 18px rgba(147,112,219,0.38);
-            margin-top: 8px;
-        }
-        .btn-send:hover { opacity: 0.93; transform: translateY(-1px); box-shadow: 0 6px 24px rgba(147,112,219,0.48); }
-        .btn-send:active { transform: translateY(0); }
-        .btn-send svg { width: 18px; height: 18px; }
-        .btn-send:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
-
-        /* API key warning */
-        .api-warning {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            background: #fffbeb;
-            border: 1px solid #fcd34d;
-            border-radius: 10px;
-            padding: 12px 16px;
-            font-size: 13px;
-            color: #78350f;
-            margin-bottom: 24px;
-        }
-        .api-warning svg { width: 18px; height: 18px; flex-shrink: 0; color: #d97706; }
-        .api-warning code {
-            background: rgba(0,0,0,0.06);
-            border-radius: 4px;
-            padding: 1px 5px;
-            font-size: 12px;
-        }
-
-        /* ===== FOOTER ===== */
-        footer.bottom-banner {
-            position: fixed;
-            bottom: 0; left: 0; right: 0;
-            height: var(--footer-height);
-            background: linear-gradient(135deg, #7B5EBF 0%, #9370DB 100%);
-            border-top: 1px solid rgba(255,255,255,0.12);
-            box-shadow: 0 -4px 20px rgba(60,20,100,0.3);
-            display: flex; align-items: center; justify-content: center;
-            z-index: 1000;
-        }
-        footer.bottom-banner p { font-size: 13px; color: rgba(255,255,255,0.65); font-weight: 300; }
-        footer.bottom-banner p span { color: rgba(255,255,255,0.92); font-weight: 500; }
-
-        /* ===== RESPONSIVE ===== */
-        @media (max-width: 700px) {
-            :root { --banner-height: 80px; }
-            .banner-nav-row { display: none; }
-            .hamburger { display: flex; }
-            .email-card { padding: 24px 18px; }
-            .form-row { flex-direction: column; gap: 0; }
-        }
-        @media (max-width: 440px) {
-            .btn-login span { display: none; }
-            .btn-login { padding: 0 12px; }
-        }
-    </style>
+    <link rel="stylesheet" href="css/sendgridstyles.css">
 </head>
 <body>
 

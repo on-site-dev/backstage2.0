@@ -5,7 +5,7 @@ if(isset($_SERVER['HTTPS'])){
 else{
     $protocol = 'http';
 }
-$baseURL = $protocol . "://" . $_SERVER['HTTP_HOST'] . '/bs20php/';
+$baseURL = $protocol . "://" . $_SERVER['HTTP_HOST'] . '/backstagedev/';
 error_log('Baseurl=' . $baseURL);
 
 $navItems = [
@@ -17,6 +17,7 @@ $navItems = [
         ['id' => 'nav-admin-sites', 'label' => 'Manage Sites',        'href' => $baseURL . 'sites.php'],
         ['id' => 'nav-admin-users', 'label' => 'Manage Users', 'href' => $baseURL . 'users.php'],
         ['id' => 'nav-admin-email', 'label' => 'Send Emails', 'href' => $baseURL . 'send_email.php'],
+        ['id' => 'nav-admin-sms', 'label' => 'Send Texts', 'href' => $baseURL . 'send_sms.php'],
     ]],
     ['id' => 'nav-ziflow',     'label' => 'Ziflow',     'href' => '#ziflow',      'children' => []],
     [
