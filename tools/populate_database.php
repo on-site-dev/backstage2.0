@@ -24,12 +24,20 @@ $sourceconn = mysqli_connect(SOURCE_DB_SERVER, SOURCE_DB_USERNAME, SOURCE_DB_PAS
 $targetconn = mysqli_connect(TARGET_DB_SERVER, TARGET_DB_USERNAME, TARGET_DB_PASSWORD, TARGET_DB_NAME, TARGET_DB_SERVERPORT);
 
 // load the source sites
-$numprojects = loadSites($sourceconn, $targetconn);
-echo('<h1>Total Sites: ' . $numprojects . '</h1>');
+$numrows = loadSites($sourceconn, $targetconn);
+echo('<h1>Total Sites: ' . $numrows . '</h1>');
+
+// load the source users
+$numrows = loadUsers($sourceconn, $targetconn);
+echo('<h1>Total users: ' . $numrows . '</h1>');
 
 // load the source projects
-// $numprojects = loadProjects($sourceconn, $targetconn);
-// echo('<h1>Total projects: ' . $numprojects . '</h1>');
+$numrows = loadProjects($sourceconn, $targetconn);
+echo('<h1>Total projects: ' . $numrows . '</h1>');
+
+// close the connections
+mysqli_close($sourceconn);
+mysqli_close($targetconn);
 
 echo('<h1>Done.</h1>');
 
@@ -107,6 +115,38 @@ echo('<h1>Done.</h1>');
     }
 
 
+    function loadUsers($sourceconn, $targetconn) {
+
+        $rowcount = 0;
+
+        try {
+            if ($sourceconn) {
+                $sql = "SELECT * 
+                        FROM os2_users
+                        ORDER BY id;
+                        ";
+
+                $rows = getSourceRows($sourceconn, $sql);
+
+                // now insert into the new projects table
+                if ($targetconn) {
+                    foreach ($rows as $row) {
+                        $newid = insertUser($targetconn, $row);
+                        if ($newid > 0) {
+                            $rowcount++;
+                        }
+                    }
+                }
+
+            }
+        }
+        catch (Exception $err) {
+            error_log('Error in get of target rows: ' . $err);
+        }
+
+        return $rowcount;
+    }
+
 
     function getSourceRows($sourceconn, $sql): array {
 
@@ -124,7 +164,6 @@ echo('<h1>Done.</h1>');
                     mysqli_free_result($res);
                 }
 
-                mysqli_close($sourceconn);
             }
         }
         catch (Exception $err) {
@@ -321,7 +360,114 @@ echo('<h1>Done.</h1>');
                         $r = mysqli_fetch_assoc($result);
                         $insertedid = $r['lastid'];
                     }
-                    // error_log('Inserted: ' . $insertedid);
+
+
+                }
+                catch (EXCEPTION $stmterr) {
+                    error_log('Err in stmt execute: ' . $stmterr);
+                }
+            }
+        }
+        catch (EXCEPTION $err) {
+            error_log('Error: ' . $err);
+        }
+
+        return $insertedid;
+    }
+
+
+    function insertUser($targetconn, $row) {
+
+        $insertedid = 0;
+
+        try {
+            if ($targetconn) {
+                mysqli_set_charset($targetconn, 'utf8mb4'); // important
+
+                $sql = "INSERT INTO backstage20.users
+                        (first_name,
+                        last_name,
+                        email,
+                        password,
+                        ref_id,
+                        status,
+                        created_by,
+                        created_date,
+                        modified_by,
+                        modified_date)
+                        VALUES ("; 
+
+                $sql .= "?," .
+                        "?," . 
+                        "'" . $row['email'] . "'," . 
+                        "'" . $row['password'] . "'," . 
+                        "" . $row['id'] . "," .
+                        "'" . $row['status'] . "'," . 
+                        "'" . $row['created_by'] . "'," . 
+                        "'" . $row['created_date'] . "'," . 
+                        "'" . $row['modified_by'] . "'," . 
+                        "'" . $row['modified_date'] . "'" . 
+                        ")";
+
+                // add the row
+                try {
+                    $stmt = $targetconn->prepare($sql);
+
+                    // "ssi" means: string, string, integer
+                    $stmt->bind_param("ss", $row['first_name'], $row['last_name']); 
+
+                    // Execute the statement
+                    $stmt->execute();
+
+                    // get the id just created 
+                    $sql = "SELECT LAST_INSERT_ID() as lastid;";
+                    $result = mysqli_query($targetconn, $sql);
+                    if ($result) {
+                        $r = mysqli_fetch_assoc($result);
+                        $insertedid = $r['lastid'];
+                    }
+
+                    // now, add the address entry
+                    $sql = "INSERT INTO addresses
+                                (owner_type,
+                                owner_id,
+                                address_type,
+                                address,
+                                city,
+                                county,
+                                state,
+                                zip,
+                                country,
+                                status,
+                                created_by,
+                                created_date,
+                                modified_by,
+                                modified_date)
+                            VALUES (";
+                    $sql .= "'U'," .
+                            "" . $insertedid . "," . 
+                            "'P'," .
+                            "?," . 
+                            "'" . $row['city'] . "'," . 
+                            "''," .
+                            "'" . $row['state'] . "'," . 
+                            "'" . $row['zip'] . "'," . 
+                            "'USA'," .
+                            "'" . $row['status'] . "'," . 
+                            "'" . $row['created_by'] . "'," . 
+                            "'" . $row['created_date'] . "'," . 
+                            "'" . $row['modified_by'] . "'," . 
+                            "'" . $row['modified_date'] . "'" . 
+                            ")";
+
+                    $stmt = $targetconn->prepare($sql);
+
+                    // "ssi" means: string, string, integer
+                    $stmt->bind_param("s", $row['address']); 
+
+                    // Execute the statement
+                    $stmt->execute();
+
                 }
                 catch (EXCEPTION $stmterr) {
                     error_log('Err in stmt execute: ' . $stmterr);
