@@ -3,20 +3,15 @@
 class clsProject {
 
     public $id;
-    public $first_name;
-    public $last_name;
-    public $email;
-    public $password;
-    public $ref_id;
-    public $owner_type;
-    public $owner_id;
-    public $address_type;
-    public $address;
-    public $city;
-    public $county;
-    public $state;
-    public $zip;
-    public $country;    
+    public $site_id;
+    public $project_name;
+    public $project_type;
+    public $project_status;
+    public $description;
+    public $initial_creation_date;
+    public $due_date;
+    public $ref_project_id;
+    public $site_customer_id;
     public $status;
     public $created_by;
     public $created_date;
@@ -28,26 +23,21 @@ class clsProject {
     public function __construct() {
 
         try {
-            $this->id = '';
-            $this->first_name = '';
-            $this->last_name = '';
-            $this->email = '';
-            $this->password = '';
-            $this->ref_id = 0;
-            $this->owner_type = '';
-            $this->owner_id = 0;
-            $this->address_type = '';
-            $this->address = '';
-            $this->city = '';
-            $this->county = '';
-            $this->state = '';
-            $this->zip = '';
-            $this->country = '';    
+            $this->id = 0;
+            $this->site_id = '';
+            $this->project_name = '';
+            $this->project_type = '';
+            $this->project_status = '';
+            $this->description = '';
+            $this->initial_creation_date = '';
+            $this->due_date = '';
+            $this->ref_project_id = '';
+            $this->site_customer_id = '';
             $this->status = '';
             $this->created_by = '';
             $this->created_date = '';
             $this->modified_by = '';
-            $this->modified_date = '';            
+            $this->modified_date = '';        
         }
         catch (EXCEPTION $err) {
             error_log('Error in User constructor');
@@ -59,30 +49,25 @@ class clsProject {
 
 
 
-    public function loadUser($row) {
+    public function load($row) {
         $status = true;
 
         try {
             $this->id = $row['id'];
-            $this->first_name = $row['first_name'];
-            $this->last_name = $row['last_name'];
-            $this->email = $row['email'];
-            $this->password = $row['password'];
-            $this->ref_id = $row['ref_id'];
-            $this->owner_type = $row['owner_type'];
-            $this->owner_id = $row['owner_id'];
-            $this->address_type = $row['address_type'];
-            $this->address = $row['address'];
-            $this->city = $row['city'];
-            $this->county = $row['county'];
-            $this->state = $row['state'];
-            $this->zip = $row['zip'];
-            $this->country = $row['country'];    
+            $this->site_id = $row['site_id'];
+            $this->project_name = $row['project_name'];
+            $this->project_type = $row['project_type'];
+            $this->project_status = $row['project_status'];
+            $this->description = $row['description'];
+            $this->initial_creation_date = $row['initial_creation_date'];
+            $this->due_date = $row['due_date'];
+            $this->ref_project_id = $row['ref_project_id'];
+            $this->site_customer_id = $row['site_customer_id'];
             $this->status = $row['status'];
             $this->created_by = $row['created_by'];
             $this->created_date = $row['created_date'];
             $this->modified_by = $row['modified_by'];
-            $this->modified_date = $row['modified_date'];
+            $this->modified_date = $row['modified_date'];    
 
         }
         catch (EXCEPTION $err) {
