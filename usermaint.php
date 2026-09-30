@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+session_start();
+
 include_once 'config.php';
 
 /* =====================================================================
@@ -333,9 +335,19 @@ if ($isAjax && $_SERVER['REQUEST_METHOD'] === 'GET') {
 /* =====================================================================
    Stand-alone HTML page (normal navigation, not AJAX)
    ===================================================================== */
-$siteName    = "Backstage 2.0";
-$studioName  = "On-Site Studios";
+$siteName    = $_SESSION['siteName']   ?? "Backstage 2.1";
+$studioName  = $_SESSION['studioName'] ?? "On-Site Studios";
 $currentYear = date('Y');
+
+$loggedInStatusButton = "Log In";
+if (isset($_SESSION["loggedInStatus"]) && $_SESSION["loggedInStatus"] == "In") {
+    $loggedInStatusButton = "Log Out";
+}
+
+// Suppress header/footer when loaded inside a dashboard frame-widget (see index.php)
+$isPalletEmbed = isset($_GET['pallet']) && $_GET['pallet'] === '1';
+
+include_once 'includes/navitems.php';
 
 $editId   = $_GET['id'] ?? null;
 $existing = null;
@@ -348,10 +360,6 @@ $pageTitle = ($isNew ? "Add User — " : "Edit User — ") . htmlspecialchars($s
 $flashSaved = isset($_GET['saved']) ? (bool) $_GET['saved'] : null;
 $flashMsg   = $_GET['msg'] ?? null;
 
-/* NOTE: This is a deliberately standalone page — no shared site header,
-   navigation, or footer are rendered here. The only ways off this page
-   are the Cancel link and the Save button below, both of which return
-   the user to users.php. */
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -365,14 +373,20 @@ $flashMsg   = $_GET['msg'] ?? null;
 <style>
   * { box-sizing: border-box; }
   html, body { height:100%; margin:0; }
-  .um-wrap {
-    width:100%; height:90vh; margin:0 auto; padding:24px 32px;
-    display:flex; flex-direction:column;
+  /* Pinned between the fixed header and footer. --um-top / --um-bottom are
+     set from the real header/footer heights by the script at the bottom. */
+  main.um-wrap {
+    position:fixed; left:0; right:0;
+    top:var(--um-top, 100px); bottom:var(--um-bottom, 60px);
+    width:auto; height:auto; min-height:0;
+    margin:0; padding:16px 32px;
+    flex:none; display:flex; flex-direction:column;
   }
+  body.pallet-embed main.um-wrap { top:0; bottom:0; }
   .um-card {
     flex:1; min-height:0; display:flex; flex-direction:column;
     background:#fff; border-radius:14px; box-shadow:0 4px 24px rgba(60,30,100,.12);
-    padding:28px 36px 24px;
+    padding:22px 36px 18px;
   }
   .um-card-header { flex:none; }
   .um-title { font-family:'Playfair Display', serif; font-size:26px; color:#4a2e7a; margin-bottom:4px; }
@@ -409,7 +423,8 @@ $flashMsg   = $_GET['msg'] ?? null;
   }
   .um-field input:focus, .um-field select:focus, .um-field textarea:focus { outline:none; border-color:#7A55C7; box-shadow:0 0 0 3px rgba(122,85,199,.15); }
   .um-field textarea { min-height:80px; resize:vertical; }
-  .um-actions { flex:none; margin-top:16px; display:flex; gap:12px; justify-content:flex-end; border-top:1px solid #ece5f7; padding-top:20px; }
+  .um-actions { flex:none; margin-top:12px; display:flex; gap:12px; justify-content:flex-end; border-top:1px solid #ece5f7; padding-top:14px; }
+  .um-card > .um-flash, .um-title, .um-sub, .um-tabs { flex:none; }
   .um-btn { border:none; border-radius:8px; padding:10px 20px; font-size:14px; font-weight:500; cursor:pointer; }
   .um-btn-save   { background:#7A55C7; color:#fff; }
   .um-btn-save:hover { background:#6644AA; }
@@ -426,7 +441,11 @@ $flashMsg   = $_GET['msg'] ?? null;
   .um-placeholder p { font-size:13px; margin:0; max-width:420px; line-height:1.5; }
 </style>
 </head>
-<body style="overflow:hidden;">
+<body style="overflow:hidden;"<?= $isPalletEmbed ? ' class="pallet-embed"' : '' ?>>
+
+<?php if (!$isPalletEmbed): ?>
+<?php include_once 'includes/header.php'; ?>
+<?php endif; ?>
 
 <main class="um-wrap">
   <div class="um-card">
@@ -590,7 +609,27 @@ $flashMsg   = $_GET['msg'] ?? null;
     });
   });
 })();
+
+// Keep the form pinned between the real header and footer heights
+(function () {
+  var root = document.documentElement;
+  function fit() {
+    var header = document.querySelector('header.top-banner');
+    var footer = document.querySelector('footer.bottom-banner');
+    root.style.setProperty('--um-top',    (header ? header.getBoundingClientRect().bottom : 0) + 'px');
+    root.style.setProperty('--um-bottom', (footer ? footer.offsetHeight : 0) + 'px');
+  }
+  fit();
+  window.addEventListener('load', fit);
+  window.addEventListener('resize', fit);
+})();
 </script>
+
+<?php if (!$isPalletEmbed): ?>
+<footer class="bottom-banner" role="contentinfo">
+  <p>&copy; 2012–<?= $currentYear ?> <span><?= htmlspecialchars($studioName) ?></span>. All rights reserved.</p>
+</footer>
+<?php endif; ?>
 
 </body>
 </html>

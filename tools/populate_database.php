@@ -81,7 +81,6 @@ echo('<h1>Done.</h1>');
     }
 
 
-
     function loadProjects($sourceconn, $targetconn) {
 
         $rowcount = 0;

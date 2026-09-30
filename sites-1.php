@@ -1,33 +1,19 @@
 <?php
 declare(strict_types=1);
 
-session_start();
-
 include_once 'config.php';
 
-$siteName    = $_SESSION['siteName']   ?? "Backstage 2.1";
-$studioName  = $_SESSION['studioName'] ?? "On-Site Studios";
+$siteName    = "Backstage 2.0";
+$studioName  = "On-Site Studios";
 $currentYear = date('Y');
-$pageTitle   = "Projects — " . htmlspecialchars($siteName);
-
-
-$loggedInStatusButton = "Log In";
-if (isset($_SESSION["loggedInStatus"]) && $_SESSION["loggedInStatus"] == "In") {
-    $loggedInStatusButton = "Log Out";
-}
-
-// Suppress header/footer when loaded inside a dashboard frame-widget (see index.php)
-$isPalletEmbed = isset($_GET['pallet']) && $_GET['pallet'] === '1';
+$pageTitle   = "Sites — " . htmlspecialchars($siteName);
 
 include_once 'includes/navitems.php';
 
 $rows = $columns = [];
-$dbError   = null;
+$dbError = null;
 $totalRows = 0;
 $colUnique = [];
-
-const PAGE_SIZE = 100;
-$currentPage = max(1, (int)($_GET['page'] ?? 1));
 
 try {
     $dsn = sprintf('mysql:host=%s;dbname=%s;charset=%s', DB_HOST, DB_NAME, DB_CHARSET);
@@ -36,87 +22,29 @@ try {
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES   => false,
     ]);
-    // Get real projects columns from the schema
-    $schemaColumns = $pdo->query("SHOW COLUMNS FROM `projects`")->fetchAll();
-    $schemaCols    = array_column($schemaColumns, 'Field');
-
-    // Inject synthetic 'site_name' column immediately after 'site_id'
-    $siteIdPos = array_search('site_id', $schemaCols, true);
-    $columns   = $schemaColumns;
-    if ($siteIdPos !== false) {
-        $syntheticCol = ['Field' => 'site_name', 'Type' => 'varchar', 'Null' => 'YES', 'Key' => '', 'Default' => null, 'Extra' => ''];
-        array_splice($columns, $siteIdPos + 1, 0, [$syntheticCol]);
-    }
-    $allowedCols = array_column($columns, 'Field');   // includes site_name
-
-    // Sort col: site_name sorts on sites.name, all others sort on projects.<col>
-    $sortCol = $_GET['sort'] ?? ($allowedCols[0] ?? '');
-    $sortDir = strtoupper($_GET['dir'] ?? 'ASC') === 'DESC' ? 'DESC' : 'ASC';
+    $columns     = $pdo->query("SHOW COLUMNS FROM `sites`")->fetchAll();
+    $allowedCols = array_column($columns, 'Field');
+    $sortCol     = $_GET['sort'] ?? ($allowedCols[0] ?? '');
+    $sortDir     = strtoupper($_GET['dir'] ?? 'ASC') === 'DESC' ? 'DESC' : 'ASC';
     if (!in_array($sortCol, $allowedCols, true)) $sortCol = $allowedCols[0] ?? '';
-    if ($sortCol === 'site_name') {
-        $orderSql = " ORDER BY `sites`.`name` {$sortDir}";
-    } elseif ($sortCol !== '') {
-        $orderSql = " ORDER BY `projects`.`{$sortCol}` {$sortDir}";
-    } else {
-        $orderSql = '';
-    }
-
-    // Base JOIN fragment reused in all queries
-    $joinSql = " FROM `projects` LEFT JOIN `sites` ON `projects`.`site_id` = `sites`.`id`";
-
-    // Total row count (for pagination maths)
-    $totalRows   = (int)$pdo->query("SELECT COUNT(*){$joinSql}")->fetchColumn();
-    $totalPages  = max(1, (int)ceil($totalRows / PAGE_SIZE));
-    $currentPage = min($currentPage, $totalPages);
-    $offset      = ($currentPage - 1) * PAGE_SIZE;
-
-    // Fetch only the current page, selecting all projects cols + sites.name AS site_name
-    $stmt = $pdo->prepare(
-        "SELECT `projects`.*, `sites`.`name` AS `site_name`{$joinSql}{$orderSql} LIMIT :limit OFFSET :offset"
-    );
-    $stmt->bindValue(':limit',  PAGE_SIZE, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset,   PDO::PARAM_INT);
-    $stmt->execute();
-    $rows = $stmt->fetchAll();
-
-    // Build unique-value lists for column-filter dropdowns (full table, not just current page)
+    $orderSql    = $sortCol !== '' ? " ORDER BY `{$sortCol}` {$sortDir}" : '';
+    $rows        = $pdo->query("SELECT * FROM `sites`{$orderSql}")->fetchAll();
+    $totalRows   = count($rows);
     foreach ($allowedCols as $field) {
         $vals = [];
-        if ($field === 'site_name') {
-            // Pull distinct site names from the joined sites table
-            $colStmt = $pdo->query(
-                "SELECT DISTINCT `sites`.`name`{$joinSql} ORDER BY `sites`.`name` ASC"
-            );
-        } else {
-            $colStmt = $pdo->query(
-                "SELECT DISTINCT `projects`.`{$field}`{$joinSql} ORDER BY `projects`.`{$field}` ASC"
-            );
-        }
-        foreach ($colStmt->fetchAll(PDO::FETCH_COLUMN) as $v) {
+        foreach ($rows as $r) {
+            $v = $r[$field] ?? null;
             $vals[$v === null ? "\x00NULL\x00" : (string)$v] = $v;
         }
         ksort($vals, SORT_NATURAL | SORT_FLAG_CASE);
         $colUnique[$field] = array_values($vals);
     }
 } catch (PDOException $e) {
-    $dbError    = $e->getMessage();
-    $totalPages = 1;
+    $dbError = $e->getMessage();
 }
 
 function sortUrl(string $col, string $cc, string $cd): string {
-    // Preserve current page when changing sort; reset to page 1 when direction flips
-    global $currentPage;
-    $newDir = ($col === $cc && $cd === 'ASC') ? 'DESC' : 'ASC';
-    $page   = ($col === $cc) ? $currentPage : 1;
-    $q = ['sort' => $col, 'dir' => $newDir, 'page' => $page];
-    if (isset($_GET['pallet']) && $_GET['pallet'] === '1') $q['pallet'] = '1';
-    return '?' . http_build_query($q);
-}
-
-function pageUrl(int $page): string {
-    $params = $_GET;
-    $params['page'] = $page;
-    return '?' . http_build_query($params);
+    return '?' . http_build_query(['sort' => $col, 'dir' => ($col === $cc && $cd === 'ASC') ? 'DESC' : 'ASC']);
 }
 ?>
 <!DOCTYPE html>
@@ -128,89 +56,79 @@ function pageUrl(int $page): string {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/bs20sitestyles.css">
-<style>
-/* ── Pagination bar ── */
-.pagination-bar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 20px 16px;
-    border-top: 1px solid rgba(147,112,219,.15);
-    flex-wrap: wrap;
-}
-.page-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 7px 16px;
-    border-radius: 8px;
-    font-size: 13.5px;
-    font-weight: 500;
-    text-decoration: none;
-    color: #fff;
-    background: linear-gradient(135deg, #7B5EBF, #9370DB);
-    border: none;
-    cursor: pointer;
-    transition: opacity .15s, transform .12s;
-    white-space: nowrap;
-}
-.page-btn:hover { opacity: .88; transform: translateY(-1px); }
-.page-btn.disabled {
-    background: rgba(147,112,219,.18);
-    color: rgba(255,255,255,.35);
-    cursor: default;
-    pointer-events: none;
-    transform: none;
-}
-.page-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
-.page-numbers {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    flex-wrap: wrap;
-}
-.page-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 34px;
-    height: 34px;
-    padding: 0 6px;
-    border-radius: 7px;
-    font-size: 13px;
-    font-weight: 500;
-    text-decoration: none;
-    color: #9370DB;
-    background: rgba(147,112,219,.1);
-    border: 1px solid rgba(147,112,219,.2);
-    transition: background .15s, color .15s;
-}
-.page-num:hover { background: rgba(147,112,219,.22); }
-.page-num.active {
-    background: linear-gradient(135deg, #7B5EBF, #9370DB);
-    color: #fff;
-    border-color: transparent;
-    cursor: default;
-    pointer-events: none;
-}
-.page-ellipsis {
-    color: #b09ed4;
-    font-size: 13px;
-    padding: 0 2px;
-}
-.page-info {
-    margin-left: auto;
-    font-size: 12.5px;
-    color: #b09ed4;
-    white-space: nowrap;
-}
-</style>
 </head>
 <body>
 
-<?php if (!$isPalletEmbed): ?>
-<?php include_once 'includes/header.php'; ?>
-<?php endif; ?>
+<!-- BANNER -->
+<header class="top-banner" role="banner">
+  <div class="banner-top-row">
+    <div class="logo-group">
+      <a href="index.php" class="logo" aria-label="<?= htmlspecialchars($siteName) ?> Home">
+        <img src="images/ONSITE-LOGO-New-Web-Small-White-300x139-1.png" alt="Logo" class="logo-img"/>
+      </a>
+      <span class="logo-site-label"><?= htmlspecialchars($siteName) ?></span>
+    </div>
+    <div class="search-wrapper">
+      <form class="search-bar" role="search" action="#" method="get">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
+        <input type="search" name="q" placeholder="Search anything…" aria-label="Search" autocomplete="off"/>
+      </form>
+    </div>
+    <div class="banner-right">
+      <a href="login.php" class="btn-login" aria-label="Log in">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h7a2 2 0 012 2v1"/></svg>
+        <span>Log In</span>
+      </a>
+      <div class="avatar-wrap" role="button" tabindex="0" aria-label="User profile">
+        <div class="avatar">A</div>
+        <span class="avatar-status" aria-label="Online"></span>
+      </div>
+    </div>
+    <button class="hamburger" id="hamburgerBtn" aria-label="Toggle navigation" aria-expanded="false">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+    </button>
+  </div>
+  <div class="banner-nav-row">
+    <nav class="banner-nav" aria-label="Main navigation">
+      <?php foreach ($navItems as $item): $hc = !empty($item['children']); ?>
+        <div class="nav-item">
+          <a href="<?= htmlspecialchars($item['href']) ?>" <?= $hc ? 'aria-haspopup="true"' : '' ?>>
+            <?= htmlspecialchars($item['label']) ?>
+            <?php if ($hc): ?><svg class="chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg><?php endif; ?>
+          </a>
+          <?php if ($hc): ?>
+            <div class="nav-dropdown" role="menu">
+              <?php foreach ($item['children'] as $ch): ?>
+                <a href="<?= htmlspecialchars($ch['href']) ?>" role="menuitem"><?= htmlspecialchars($ch['label']) ?></a>
+              <?php endforeach; ?>
+            </div>
+          <?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    </nav>
+  </div>
+</header>
+
+<!-- Mobile Nav -->
+<nav class="mobile-nav" id="mobileNav" aria-label="Mobile navigation">
+  <?php foreach ($navItems as $item): $hc = !empty($item['children']); ?>
+    <div class="mobile-nav-item">
+      <?php if ($hc): ?>
+        <a href="<?= htmlspecialchars($item['href']) ?>" class="mobile-parent">
+          <?= htmlspecialchars($item['label']) ?>
+          <svg class="m-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+        </a>
+        <div class="mobile-submenu">
+          <?php foreach ($item['children'] as $ch): ?>
+            <a href="<?= htmlspecialchars($ch['href']) ?>"><?= htmlspecialchars($ch['label']) ?></a>
+          <?php endforeach; ?>
+        </div>
+      <?php else: ?>
+        <a href="<?= htmlspecialchars($item['href']) ?>" class="mobile-simple"><?= htmlspecialchars($item['label']) ?></a>
+      <?php endif; ?>
+    </div>
+  <?php endforeach; ?>
+</nav>
 
 <!-- COLUMN MANAGER DRAWER -->
 <div class="col-manager-overlay" id="colManagerOverlay" aria-hidden="true">
@@ -251,16 +169,13 @@ function pageUrl(int $page): string {
 <main>
   <div class="page-header">
     <div class="page-header-left">
-      <h1>Projects</h1>
-      <p><?= htmlspecialchars(DB_NAME) ?> &rsaquo; projects</p>
+      <h1>Sites</h1>
+      <p><?= htmlspecialchars(DB_NAME) ?> &rsaquo; sites</p>
     </div>
     <?php if (!$dbError): ?>
       <span class="row-count-badge">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:13px;height:13px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
         <?= number_format($totalRows) ?> row<?= $totalRows !== 1 ? 's' : '' ?>
-      </span>
-      <span class="row-count-badge" style="margin-left:6px;">
-        Page <?= $currentPage ?> of <?= $totalPages ?>
       </span>
     <?php endif; ?>
   </div>
@@ -277,7 +192,7 @@ function pageUrl(int $page): string {
     <div class="table-card"><div class="state-box">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/></svg>
       <h3>No columns found</h3>
-      <p>The <strong>projects</strong> table appears to be empty or does not exist.</p>
+      <p>The <strong>sites</strong> table appears to be empty or does not exist.</p>
     </div></div>
 
   <?php else:
@@ -304,7 +219,7 @@ function pageUrl(int $page): string {
       </button>
 
       <button class="btn-clear-all" id="btnClearAll" type="button">✕ Clear filters</button>
-      <span class="filter-label" id="visibleCount"><?= count($rows) ?> of <?= $totalRows ?> rows</span>
+      <span class="filter-label" id="visibleCount"><?= $totalRows ?> of <?= $totalRows ?> rows</span>
     </div>
 
     <!-- Active filter chips -->
@@ -313,7 +228,7 @@ function pageUrl(int $page): string {
     <!-- Table -->
     <div class="table-card">
       <div class="table-scroll">
-        <table id="sitesTable" aria-label="Projects data">
+        <table id="sitesTable" aria-label="Sites data">
           <thead>
             <!-- Sort row -->
             <tr class="sort-row" id="sortRow">
@@ -391,11 +306,10 @@ function pageUrl(int $page): string {
 
           <tbody id="sitesBody">
             <?php if (empty($rows)): ?>
-              <tr><td colspan="<?= count($columns)+1 ?>" style="text-align:center;padding:40px;color:#9380b0;font-weight:300;">No rows found in the projects table.</td></tr>
-            <?php else: foreach ($rows as $i => $row):
-              $rowNum = $offset + $i + 1; ?>
+              <tr><td colspan="<?= count($columns)+1 ?>" style="text-align:center;padding:40px;color:#9380b0;font-weight:300;">No rows found in the sites table.</td></tr>
+            <?php else: foreach ($rows as $i => $row): ?>
               <tr>
-                <td class="row-num"><?= $rowNum ?></td>
+                <td class="row-num"><?= $i+1 ?></td>
                 <td class="actions-td">
                   <button type="button" class="action-btn action-btn-edit"
                           data-action="edit" data-row="<?= $i ?>"
@@ -413,7 +327,7 @@ function pageUrl(int $page): string {
                   </button>
                 </td>
                 <?php
-                $yNoCols = [];
+                $yNoCols = ['active','master_site','branded_site'];
                 foreach ($columns as $col):
                   $field    = $col['Field'];
                   $val      = $row[$field] ?? null;
@@ -442,69 +356,8 @@ function pageUrl(int $page): string {
       </div>
       <div class="table-footer">
         <span class="sort-info">Sorted by <strong><?= htmlspecialchars($sortCol) ?></strong>&nbsp;<?= $sortDir==='ASC' ? '↑ A → Z' : '↓ Z → A' ?></span>
-        <span id="footerCount"><?= count($rows) ?> of <?= $totalRows ?> row<?= $totalRows!==1?'s':'' ?></span>
+        <span id="footerCount"><?= $totalRows ?> row<?= $totalRows!==1?'s':'' ?></span>
       </div>
-
-      <!-- Pagination bar -->
-      <?php if ($totalPages > 1): ?>
-      <div class="pagination-bar">
-        <!-- Previous -->
-        <?php if ($currentPage > 1): ?>
-          <a class="page-btn page-prev" href="<?= htmlspecialchars(pageUrl($currentPage - 1)) ?>" aria-label="Previous page">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-            Previous
-          </a>
-        <?php else: ?>
-          <span class="page-btn page-prev disabled" aria-disabled="true">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-            Previous
-          </span>
-        <?php endif; ?>
-
-        <!-- Page numbers -->
-        <div class="page-numbers">
-          <?php
-            // Show first, last, current ±2, with ellipsis gaps
-            $window = 2;
-            $shown  = [];
-            for ($p = 1; $p <= $totalPages; $p++) {
-                if ($p === 1 || $p === $totalPages || abs($p - $currentPage) <= $window) {
-                    $shown[] = $p;
-                }
-            }
-            $prev = null;
-            foreach ($shown as $p):
-                if ($prev !== null && $p - $prev > 1): ?>
-                  <span class="page-ellipsis">…</span>
-                <?php endif; ?>
-                <a class="page-num<?= $p === $currentPage ? ' active' : '' ?>"
-                   href="<?= htmlspecialchars(pageUrl($p)) ?>"
-                   aria-label="Page <?= $p ?>"
-                   <?= $p === $currentPage ? 'aria-current="page"' : '' ?>>
-                  <?= $p ?>
-                </a>
-          <?php $prev = $p; endforeach; ?>
-        </div>
-
-        <!-- Page info -->
-        <span class="page-info">
-          Rows <?= number_format($offset + 1) ?>–<?= number_format(min($offset + PAGE_SIZE, $totalRows)) ?> of <?= number_format($totalRows) ?>
-        </span>
-
-        <!-- Next -->
-        <?php if ($currentPage < $totalPages): ?>
-          <a class="page-btn page-next" href="<?= htmlspecialchars(pageUrl($currentPage + 1)) ?>" aria-label="Next page">
-            Next
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-          </a>
-        <?php else: ?>
-          <span class="page-btn page-next disabled" aria-disabled="true">
-            Next
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-          </span>
-        <?php endif; ?>
-      </div>
-      <?php endif; ?>
     </div>
 
   <?php endif; ?>
@@ -523,13 +376,30 @@ function pageUrl(int $page): string {
   </div>
 </div>
 
-<?php if (!$isPalletEmbed): ?>
 <footer class="bottom-banner" role="contentinfo">
   <p>&copy; 2012–<?= $currentYear ?> <span><?= htmlspecialchars($studioName) ?></span>. All rights reserved.</p>
 </footer>
-<?php endif; ?>
 
 <script>
+// ── MOBILE NAV ──────────────────────────────────────────────
+const hamburgerBtn = document.getElementById('hamburgerBtn');
+const mobileNav    = document.getElementById('mobileNav');
+hamburgerBtn?.addEventListener('click', () => {
+    const open = mobileNav.classList.toggle('open');
+    hamburgerBtn.setAttribute('aria-expanded', String(open));
+});
+document.querySelectorAll('.mobile-parent').forEach(link => {
+    link.addEventListener('click', e => {
+        e.preventDefault();
+        const item = link.closest('.mobile-nav-item');
+        item.classList.toggle('open');
+        item.parentElement.querySelectorAll('.mobile-nav-item').forEach(s => { if (s !== item) s.classList.remove('open'); });
+    });
+});
+document.querySelectorAll('.mobile-submenu a, .mobile-simple').forEach(a => {
+    a.addEventListener('click', () => { mobileNav.classList.remove('open'); hamburgerBtn?.setAttribute('aria-expanded','false'); });
+});
+
 // ── COLUMN MANAGER ──────────────────────────────────────────
 const overlay        = document.getElementById('colManagerOverlay');
 const btnOpenColMgr  = document.getElementById('btnOpenColManager');
@@ -688,8 +558,7 @@ cmdReset?.addEventListener('click', () => {
 });
 
 // ── FILTER ENGINE ─────────────────────────────────────────
-const totalRows      = <?= count($rows) ?>;   // rows on this page
-const grandTotal     = <?= $totalRows ?>;       // all rows across all pages
+const totalRows      = <?= $totalRows ?>;
 const visibleCount   = document.getElementById('visibleCount');
 const footerCount    = document.getElementById('footerCount');
 const noResults      = document.getElementById('noResults');
@@ -722,8 +591,8 @@ function applyFilters() {
         tr.style.display = show ? '' : 'none';
         if (show) visible++;
     });
-    if (visibleCount) visibleCount.textContent = visible + ' of ' + grandTotal + ' rows';
-    if (footerCount)  footerCount.textContent  = visible + ' of ' + grandTotal + ' row' + (grandTotal !== 1 ? 's' : '');
+    if (visibleCount) visibleCount.textContent = visible + ' of ' + totalRows + ' rows';
+    if (footerCount)  footerCount.textContent  = visible + ' row' + (visible !== 1 ? 's' : '');
     if (noResults)    noResults.style.display  = visible === 0 ? 'block' : 'none';
     renderChips();
 }

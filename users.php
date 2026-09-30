@@ -1,15 +1,26 @@
 <?php
 declare(strict_types=1);
 
+session_start();
+
 include_once 'config.php';
 
-$siteName    = "Backstage 2.0";
-$studioName  = "On-Site Studios";
+$siteName    = $_SESSION['siteName']   ?? "Backstage 2.1";
+$studioName  = $_SESSION['studioName'] ?? "On-Site Studios";
 $currentYear = date('Y');
 $pageTitle   = "Users — " . htmlspecialchars($siteName);
 
 $flashSaved = isset($_GET['saved']) ? (bool) $_GET['saved'] : null;
 $flashMsg   = $_GET['msg'] ?? null;
+
+
+$loggedInStatusButton = "Log In";
+if (isset($_SESSION["loggedInStatus"]) && $_SESSION["loggedInStatus"] == "In") {
+    $loggedInStatusButton = "Log Out";
+}
+
+// Suppress header/footer when loaded inside a dashboard frame-widget (see index.php)
+$isPalletEmbed = isset($_GET['pallet']) && $_GET['pallet'] === '1';
 
 include_once 'includes/navitems.php';
 
@@ -52,7 +63,9 @@ try {
 }
 
 function sortUrl(string $col, string $cc, string $cd): string {
-    return '?' . http_build_query(['sort' => $col, 'dir' => ($col === $cc && $cd === 'ASC') ? 'DESC' : 'ASC']);
+    $q = ['sort' => $col, 'dir' => ($col === $cc && $cd === 'ASC') ? 'DESC' : 'ASC'];
+    if (isset($_GET['pallet']) && $_GET['pallet'] === '1') $q['pallet'] = '1';
+    return '?' . http_build_query($q);
 }
 ?>
 <!DOCTYPE html>
@@ -67,76 +80,9 @@ function sortUrl(string $col, string $cc, string $cd): string {
 </head>
 <body>
 
-<!-- BANNER -->
-<header class="top-banner" role="banner">
-  <div class="banner-top-row">
-    <div class="logo-group">
-      <a href="index.php" class="logo" aria-label="<?= htmlspecialchars($siteName) ?> Home">
-        <img src="images/ONSITE-LOGO-New-Web-Small-White-300x139-1.png" alt="Logo" class="logo-img"/>
-      </a>
-      <span class="logo-site-label"><?= htmlspecialchars($siteName) ?></span>
-    </div>
-    <div class="search-wrapper">
-      <form class="search-bar" role="search" action="#" method="get">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/></svg>
-        <input type="search" name="q" placeholder="Search anything…" aria-label="Search" autocomplete="off"/>
-      </form>
-    </div>
-    <div class="banner-right">
-      <a href="login.php" class="btn-login" aria-label="Log in">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a2 2 0 01-2 2H6a2 2 0 01-2-2V7a2 2 0 012-2h7a2 2 0 012 2v1"/></svg>
-        <span>Log In</span>
-      </a>
-      <div class="avatar-wrap" role="button" tabindex="0" aria-label="User profile">
-        <div class="avatar">A</div>
-        <span class="avatar-status" aria-label="Online"></span>
-      </div>
-    </div>
-    <button class="hamburger" id="hamburgerBtn" aria-label="Toggle navigation" aria-expanded="false">
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-    </button>
-  </div>
-  <div class="banner-nav-row">
-    <nav class="banner-nav" aria-label="Main navigation">
-      <?php foreach ($navItems as $item): $hc = !empty($item['children']); ?>
-        <div class="nav-item">
-          <a href="<?= htmlspecialchars($item['href']) ?>" <?= $hc ? 'aria-haspopup="true"' : '' ?>>
-            <?= htmlspecialchars($item['label']) ?>
-            <?php if ($hc): ?><svg class="chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg><?php endif; ?>
-          </a>
-          <?php if ($hc): ?>
-            <div class="nav-dropdown" role="menu">
-              <?php foreach ($item['children'] as $ch): ?>
-                <a href="<?= htmlspecialchars($ch['href']) ?>" role="menuitem"><?= htmlspecialchars($ch['label']) ?></a>
-              <?php endforeach; ?>
-            </div>
-          <?php endif; ?>
-        </div>
-      <?php endforeach; ?>
-    </nav>
-  </div>
-</header>
-
-<!-- Mobile Nav -->
-<nav class="mobile-nav" id="mobileNav" aria-label="Mobile navigation">
-  <?php foreach ($navItems as $item): $hc = !empty($item['children']); ?>
-    <div class="mobile-nav-item">
-      <?php if ($hc): ?>
-        <a href="<?= htmlspecialchars($item['href']) ?>" class="mobile-parent">
-          <?= htmlspecialchars($item['label']) ?>
-          <svg class="m-chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
-        </a>
-        <div class="mobile-submenu">
-          <?php foreach ($item['children'] as $ch): ?>
-            <a href="<?= htmlspecialchars($ch['href']) ?>"><?= htmlspecialchars($ch['label']) ?></a>
-          <?php endforeach; ?>
-        </div>
-      <?php else: ?>
-        <a href="<?= htmlspecialchars($item['href']) ?>" class="mobile-simple"><?= htmlspecialchars($item['label']) ?></a>
-      <?php endif; ?>
-    </div>
-  <?php endforeach; ?>
-</nav>
+<?php if (!$isPalletEmbed): ?>
+<?php include_once 'includes/header.php'; ?>
+<?php endif; ?>
 
 <!-- COLUMN MANAGER DRAWER -->
 <div class="col-manager-overlay" id="colManagerOverlay" aria-hidden="true">
@@ -393,30 +339,13 @@ function sortUrl(string $col, string $cc, string $cd): string {
   </div>
 </div>
 
+<?php if (!$isPalletEmbed): ?>
 <footer class="bottom-banner" role="contentinfo">
   <p>&copy; 2012–<?= $currentYear ?> <span><?= htmlspecialchars($studioName) ?></span>. All rights reserved.</p>
 </footer>
+<?php endif; ?>
 
 <script>
-// ── MOBILE NAV ──────────────────────────────────────────────
-const hamburgerBtn = document.getElementById('hamburgerBtn');
-const mobileNav    = document.getElementById('mobileNav');
-hamburgerBtn?.addEventListener('click', () => {
-    const open = mobileNav.classList.toggle('open');
-    hamburgerBtn.setAttribute('aria-expanded', String(open));
-});
-document.querySelectorAll('.mobile-parent').forEach(link => {
-    link.addEventListener('click', e => {
-        e.preventDefault();
-        const item = link.closest('.mobile-nav-item');
-        item.classList.toggle('open');
-        item.parentElement.querySelectorAll('.mobile-nav-item').forEach(s => { if (s !== item) s.classList.remove('open'); });
-    });
-});
-document.querySelectorAll('.mobile-submenu a, .mobile-simple').forEach(a => {
-    a.addEventListener('click', () => { mobileNav.classList.remove('open'); hamburgerBtn?.setAttribute('aria-expanded','false'); });
-});
-
 // ── COLUMN MANAGER ──────────────────────────────────────────
 const overlay        = document.getElementById('colManagerOverlay');
 const btnOpenColMgr  = document.getElementById('btnOpenColManager');
@@ -817,9 +746,7 @@ sitesBody.addEventListener('click', e => {
     const row    = parseInt(btn.dataset.row, 10);
 
     if (action === 'edit') {
-        // Edit navigates to the standalone usermaint.php page (its own page,
-        // no shared header/footer). The user returns to users.php only by
-        // clicking Cancel or Save on that page.
+        // Edit navigates to usermaint.php (shares the site header/flyout menu).
         const tr = sitesBody.querySelectorAll('tr')[row];
         const pk = tr ? tr.dataset.pk : '';
         window.location.href = 'usermaint.php?id=' + encodeURIComponent(pk || '');

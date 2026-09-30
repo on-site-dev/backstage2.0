@@ -2,12 +2,18 @@
 
 ?>
 <!-- =====================================================
-     TOP BANNER (mirrors index.php exactly)
+     TOP BANNER
 ===================================================== -->
 <header class="top-banner" role="banner">
 
     <div class="banner-top-row">
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+            <button class="hamburger" id="navFlyoutToggle" data-nav-flyout-toggle
+                    aria-label="Open navigation" aria-controls="navFlyout" aria-expanded="false">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                </svg>
+            </button>
             <a href="index.php" class="logo" aria-label="<?= htmlspecialchars($siteName) ?> Home">
                 <img src="images/ONSITE-LOGO-New-Web-Small-White-300x139-1.png"
                      alt="<?= htmlspecialchars($siteName) ?> Logo"
@@ -38,48 +44,9 @@
                 <div class="avatar">A</div>
                 <span class="avatar-status" aria-label="Online"></span>
             </div>
-            <button class="hamburger" id="hamburgerBtn" aria-label="Toggle navigation" aria-expanded="false">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-                </svg>
-            </button>
         </div>
     </div>
 
-    <div class="banner-nav-row">
-        <nav class="banner-nav" aria-label="Main navigation">
-            <?php foreach ($navItems as $index => $item): ?>
-                <?php $hasChildren = !empty($item['children']); ?>
-                <div class="nav-item">
-                    <a id="<?= htmlspecialchars($item['id']) ?>"
-                       href="<?= htmlspecialchars($item['href']) ?>"
-                       data-nav-id="<?= htmlspecialchars($item['id']) ?>"
-                       onclick="handleNavClick(event, '<?= htmlspecialchars($item['id']) ?>')"
-                       <?= $index === 0 ? 'class="active"' : '' ?>
-                       <?= $hasChildren ? 'aria-haspopup="true"' : '' ?>>
-                        <?= htmlspecialchars($item['label']) ?>
-                        <?php if ($hasChildren): ?>
-                            <svg class="chevron" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/>
-                            </svg>
-                        <?php endif; ?>
-                    </a>
-                    <?php if ($hasChildren): ?>
-                        <div class="dropdown" role="menu">
-                            <?php foreach ($item['children'] as $child): ?>
-                                <a id="<?= htmlspecialchars($child['id']) ?>"
-                                   href="<?= htmlspecialchars($child['href']) ?>"
-                                   data-nav-id="<?= htmlspecialchars($child['id']) ?>"
-                                   onclick="handleNavClick(event, '<?= htmlspecialchars($child['id']) ?>')"
-                                   role="menuitem">
-                                    <?= htmlspecialchars($child['label']) ?>
-                                </a>
-                            <?php endforeach; ?>
-                        </div>
-                    <?php endif; ?>
-                </div>
-            <?php endforeach; ?>
-        </nav>
-    </div>
-
 </header>
+
+<?php renderNavFlyout($navItems, $siteName); ?>
