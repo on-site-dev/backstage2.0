@@ -40,7 +40,7 @@ class clsProject {
             $this->modified_date = '';        
         }
         catch (EXCEPTION $err) {
-            error_log('Error in User constructor');
+            error_log('Error in Project constructor');
         }
 
         return;
