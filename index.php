@@ -447,6 +447,43 @@ window.addEventListener('resize', layoutAllMaximizedWidgets);
 //  site (or the palette entirely — i.e. a normal top-level visit)
 //  are unaffected and keep their full header/footer.
 // ============================================================
+// ============================================================
+//  EMBEDDED PAGE TOP-SPACE TRIM
+//  Our own pages reserve room at the top for the fixed banner
+//  (--banner-height, 150px) even when the banner is suppressed in
+//  a frame (?pallet=1). Once such a page loads in a frame-widget,
+//  inject a small style that collapses that reserved space.
+//  Only same-origin pages can be adjusted; external sites
+//  (Google, etc.) are left untouched.
+// ============================================================
+function tightenEmbeddedPage(iframe) {
+    let doc;
+    try {
+        doc = iframe.contentDocument;
+    } catch {
+        return;                       // cross-origin: not accessible
+    }
+    if (!doc || !doc.head || doc.getElementById('pallet-embed-trim')) return;
+
+    const style = doc.createElement('style');
+    style.id = 'pallet-embed-trim';
+    style.textContent = `
+        :root {
+            --banner-height: 0px !important;
+            --footer-height: 0px !important;
+        }
+        html, body { margin-top: 0 !important; padding-top: 0 !important; }
+        body > main {
+            margin-top: 0 !important;
+            margin-bottom: 0 !important;
+            padding-top: 12px !important;
+        }
+    `;
+    doc.head.appendChild(style);
+    // Let pages that size themselves from the header/footer re-measure
+    try { iframe.contentWindow.dispatchEvent(new Event('resize')); } catch {}
+}
+
 function withPalletFlag(url) {
     if (!url) return url;
     try {
@@ -827,6 +864,9 @@ function buildWidgetEl(widget) {
     // Overlay (blocks iframe pointer events during drag/resize)
     const overlay = document.createElement('div');
     overlay.className = 'iframe-overlay';
+
+    // Trim the top gap on our own pages once they load in the frame
+    iframe.addEventListener('load', () => tightenEmbeddedPage(iframe));
 
     body.append(iframe, overlay);
 
