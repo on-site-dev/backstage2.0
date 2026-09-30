@@ -1,9 +1,35 @@
-<?php 
+<?php
 
 ?>
 <!-- =====================================================
      TOP BANNER
+     Row 1: hamburger · logo · site name ........ login · avatar
+     Row 2: search
 ===================================================== -->
+<style>
+    /* Banner grows to fit both rows; --banner-height is synced to the real
+       height by the script below so page content starts right beneath it. */
+    header.top-banner { height: auto !important; }
+
+    header.top-banner .banner-top-row {
+        flex: none;
+        min-height: 72px;
+        padding-top: 10px;
+        padding-bottom: 6px;
+        justify-content: space-between;
+    }
+
+    .banner-search-row {
+        display: flex;
+        justify-content: center;
+        padding: 0 24px 14px;
+    }
+    .banner-search-row .search-bar {
+        width: 100%;
+        max-width: 560px;
+    }
+</style>
+
 <header class="top-banner" role="banner">
 
     <div class="banner-top-row">
@@ -22,16 +48,6 @@
             <span class="logo-site-label"><?= htmlspecialchars($siteName) ?></span>
         </div>
 
-        <div class="search-wrapper">
-            <form class="search-bar" role="search" action="#" method="get">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
-                </svg>
-                <input type="search" name="q" placeholder="Search anything…" aria-label="Search" autocomplete="off"/>
-            </form>
-        </div>
-
         <div class="banner-right">
             <a href="login.php" class="btn-login" aria-label="Log in">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -47,6 +63,32 @@
         </div>
     </div>
 
+    <div class="banner-search-row">
+        <form class="search-bar" role="search" action="#" method="get">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M21 21l-4.35-4.35M17 11A6 6 0 1 1 5 11a6 6 0 0 1 12 0z"/>
+            </svg>
+            <input type="search" name="q" placeholder="Search anything…" aria-label="Search" autocomplete="off"/>
+        </form>
+    </div>
+
 </header>
+
+<script>
+// Keep --banner-height equal to the banner's real height so page content
+// (which uses it for its top offset) always starts just below the banner.
+(function () {
+    var header = document.querySelector('header.top-banner');
+    if (!header) return;
+    function sync() {
+        document.documentElement.style.setProperty('--banner-height', header.offsetHeight + 'px');
+    }
+    sync();
+    window.addEventListener('load', sync);
+    window.addEventListener('resize', sync);
+    if (window.ResizeObserver) new ResizeObserver(sync).observe(header);
+})();
+</script>
 
 <?php renderNavFlyout($navItems, $siteName); ?>
