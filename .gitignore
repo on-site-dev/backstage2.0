@@ -56,3 +56,10 @@ Thumbs.db
 # *.jpg 
 # *.jpeg 
 
+# ignore all sql and other backup files
+*.sql 
+*.bak
+*.zip
+*.tar 
+
+
